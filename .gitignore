@@ -1,0 +1,23 @@
+# Java build files
+*.class
+out/
+bin/
+target/
+build/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+
+# Personal / runtime data
+kis_api_config.txt
+kis_token.txt
+user_data.txt
+transaction_history.txt
+
+# Logs
+*.log
