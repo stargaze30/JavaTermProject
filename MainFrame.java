@@ -653,6 +653,7 @@ class MainFrame extends JFrame {
 
         ChartPeriod selectedPeriod = period;
         boolean indexChart = isIndexChartCode(code);
+        Asset chartAsset = indexChart ? null : market.findAsset(code);
         String chartLabel = getChartLabel(code);
         appendLog(chartLabel + " " + selectedPeriod.getDisplayName() + " 차트 조회 시작");
 
@@ -663,9 +664,9 @@ class MainFrame extends JFrame {
             protected List<CandleData> doInBackground() throws TradingException {
                 ArrayList<CandleData> candles = indexChart
                         ? new ArrayList<CandleData>(
-                                marketDataProvider.getIndexCandles(code, selectedPeriod))
+                                loadIndexCandlesWithRetry(code, selectedPeriod))
                         : new ArrayList<CandleData>(
-                                marketDataProvider.getCandles(code, selectedPeriod));
+                                loadChartCandlesWithRetry(chartAsset, selectedPeriod));
                 applyIntradayCandleIfNeeded(code, selectedPeriod, candles);
                 return candles;
             }
@@ -724,6 +725,51 @@ class MainFrame extends JFrame {
                 }
             }
         }.execute();
+    }
+
+    private List<CandleData> loadChartCandlesWithRetry(Asset asset, ChartPeriod period)
+            throws TradingException {
+        if (asset == null) {
+            throw new TradingException("차트 종목을 찾을 수 없습니다.");
+        }
+
+        try {
+            return marketDataProvider.getCandles(asset.getCode(), period);
+        } catch (TradingException e) {
+            if (!isKisRateLimitError(e)) {
+                throw e;
+            }
+
+            sleepQuietly(1000);
+            return marketDataProvider.getCandles(asset.getCode(), period);
+        }
+    }
+
+    private List<CandleData> loadIndexCandlesWithRetry(String indexName, ChartPeriod period)
+            throws TradingException {
+        try {
+            return marketDataProvider.getIndexCandles(indexName, period);
+        } catch (TradingException e) {
+            if (!isKisRateLimitError(e)) {
+                throw e;
+            }
+
+            sleepQuietly(1000);
+            return marketDataProvider.getIndexCandles(indexName, period);
+        }
+    }
+
+    private boolean isKisRateLimitError(TradingException e) {
+        String message = e.getMessage();
+        return message != null && message.contains("EGW00201");
+    }
+
+    private void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private boolean isToday(String date) {
