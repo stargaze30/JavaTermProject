@@ -46,6 +46,8 @@ class MainFrame extends JFrame {
     private static final String KOSDAQ_CHART_CODE = "KOSDAQ";
     private static final boolean DEBUG_REALTIME_UNKNOWN_ASSET = false;
     private static final int INITIAL_PRICE_CORRECTION_DELAY_MS = 850;
+    private static final int INITIAL_PRICE_RETRY_DELAY_MS = 2000;
+    private static final int INITIAL_PRICE_RATE_LIMIT_DELAY_MS = 5000;
 
     private final transient Market market;
     private final transient User user;
@@ -1057,59 +1059,90 @@ class MainFrame extends JFrame {
         }
 
         initialPriceCorrectionStarted = true;
-        new SwingWorker<PriceBackfillResult, Void>() {
+        new SwingWorker<Void, Void>() {
             @Override
-            protected PriceBackfillResult doInBackground() {
-                PriceBackfillResult result = new PriceBackfillResult();
-
+            protected Void doInBackground() throws TradingException {
                 for (Asset asset : targetAssets) {
-                    try {
-                        int currentPrice = marketDataProvider.getCurrentPrice(asset);
-                        if (currentPrice > 1) {
+                    boolean priceLoaded = false;
+
+                    while (!priceLoaded) {
+                        try {
+                            int currentPrice = marketDataProvider.getCurrentPrice(asset);
+                            if (currentPrice <= 1) {
+                                throw new TradingException("현재가가 올바르지 않습니다.");
+                            }
+
                             market.updatePriceFromRealtime(asset.getCode(), currentPrice);
-                            result.successCount++;
                             SwingUtilities.invokeLater(() -> refreshPriceViews(asset.getCode()));
-                        } else {
-                            result.failureCount++;
-                            System.err.println("초기 시세 보정 실패: "
-                                    + asset.getCode() + " / 현재가가 올바르지 않습니다.");
+                            priceLoaded = true;
+                        } catch (TradingException e) {
+                            if (isUnrecoverableInitialPriceError(e)) {
+                                throw e;
+                            }
+
+                            System.err.println("초기 시세 재시도: "
+                                    + asset.getCode() + " / " + e.getMessage());
+                            long retryDelay = isInitialPriceRateLimitError(e)
+                                    ? INITIAL_PRICE_RATE_LIMIT_DELAY_MS
+                                    : INITIAL_PRICE_RETRY_DELAY_MS;
+                            sleepForInitialPriceLoad(retryDelay);
                         }
-                    } catch (TradingException e) {
-                        result.failureCount++;
-                        System.err.println("초기 시세 보정 실패: "
-                                + asset.getCode() + " / " + e.getMessage());
                     }
 
-                    try {
-                        Thread.sleep(INITIAL_PRICE_CORRECTION_DELAY_MS);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+                    sleepForInitialPriceLoad(INITIAL_PRICE_CORRECTION_DELAY_MS);
                 }
-                return result;
+                return null;
             }
 
             @Override
             protected void done() {
                 try {
-                    PriceBackfillResult result = get();
-
-                    if (result.successCount > 0) {
-                        fileManager.saveMarketData(market);
-                    }
+                    get();
+                    fileManager.saveMarketData(market);
                     refreshAllPriceViews();
-                    appendLog("초기 시세 보정 완료: "
-                            + result.successCount + "개 성공, "
-                            + result.failureCount + "개 실패");
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 } catch (ExecutionException e) {
                     refreshAllPriceViews();
-                    appendLog("초기 시세 보정 실패: " + getErrorMessage(e));
+                    appendLog("초기 시세 조회를 계속할 수 없습니다: " + getErrorMessage(e));
                 }
             }
         }.execute();
+    }
+
+    private boolean isInitialPriceRateLimitError(TradingException e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return false;
+        }
+
+        String lowerMessage = message.toLowerCase();
+        return message.contains("EGW00201")
+                || message.contains("초당 거래건수")
+                || message.contains("호출 제한")
+                || lowerMessage.contains("rate limit")
+                || lowerMessage.contains("too many requests")
+                || lowerMessage.contains("http 429");
+    }
+
+    private boolean isUnrecoverableInitialPriceError(TradingException e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return false;
+        }
+
+        return message.contains("KIS API 키가 설정되지 않았습니다.")
+                || message.contains("API 키를 확인하세요")
+                || message.contains("토큰이 유효하지 않습니다.");
+    }
+
+    private void sleepForInitialPriceLoad(long millis) throws TradingException {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new TradingException("초기 가격 조회가 중단되었습니다.");
+        }
     }
 
     private void refreshPriceViews(String assetCode) {
@@ -1612,8 +1645,4 @@ private static class PortfolioSummary {
         }
     }
 
-    private static class PriceBackfillResult {
-        private int successCount;
-        private int failureCount;
-    }
 }
