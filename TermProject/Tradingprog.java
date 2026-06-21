@@ -5,11 +5,12 @@ import java.nio.file.Paths;
 import javax.swing.SwingUtilities;
 
 public class Tradingprog {
-    private static final Path ASSET_MASTER_FILE = Paths.get("kospi_code.mst");
+    private static final Path KOSPI_MASTER_FILE = Paths.get("kospi_code.mst");
+    private static final Path KOSDAQ_MASTER_FILE = Paths.get("kosdaq_code.mst");
 
     public static void main(String[] args) {
         Market market = Market.createDefaultMarket();
-        AssetMaster assetMaster = new AssetMaster(ASSET_MASTER_FILE);
+        AssetMaster assetMaster = new AssetMaster(KOSPI_MASTER_FILE, KOSDAQ_MASTER_FILE);
         FileManager fileManager = new FileManager(
                 Paths.get("user_data.txt"),
                 Paths.get("transaction_history.txt"));

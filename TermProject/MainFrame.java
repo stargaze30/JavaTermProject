@@ -1385,7 +1385,7 @@ class MainFrame extends JFrame {
         }
 
         if (!assetMaster.isAvailable()) {
-            showError("kospi_code.mst 파일이 없어 종목명 자동 검색을 사용할 수 없습니다.");
+            showError("종목 마스터 파일이 없어 종목명 자동 검색을 사용할 수 없습니다.");
             return;
         }
 

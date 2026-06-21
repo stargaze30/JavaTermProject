@@ -142,10 +142,10 @@ class AssetMaster {
     private final HashMap<String, AssetInfo> byName;
     private boolean available;
 
-    public AssetMaster(Path path) {
+    public AssetMaster(Path... paths) {
         byCode = new HashMap<String, AssetInfo>();
         byName = new HashMap<String, AssetInfo>();
-        load(path);
+        loadAll(paths);
     }
 
     public boolean isAvailable() {
@@ -178,12 +178,33 @@ class AssetMaster {
         return findByExactName(text);
     }
 
-    private void load(Path path) {
-        if (path == null || !Files.exists(path)) {
-            System.out.println("kospi_code.mst 파일이 없어 종목명 자동 검색을 사용할 수 없습니다.");
+    private void loadAll(Path... paths) {
+        if (paths == null || paths.length == 0) {
+            System.out.println("종목 마스터 파일이 없어 종목명 자동 검색을 사용할 수 없습니다.");
             available = false;
             return;
         }
+
+        int totalLoaded = 0;
+        for (Path path : paths) {
+            totalLoaded += load(path);
+        }
+
+        available = !byCode.isEmpty();
+        if (available) {
+            System.out.println("종목 마스터 로드 완료: " + totalLoaded + "개");
+        } else {
+            System.out.println("종목 마스터 파일이 없어 종목명 자동 검색을 사용할 수 없습니다.");
+        }
+    }
+
+    private int load(Path path) {
+        if (path == null || !Files.exists(path)) {
+            System.out.println(path + " 파일이 없어 해당 시장 종목은 자동 검색에서 제외됩니다.");
+            return 0;
+        }
+
+        int loadedCount = 0;
 
         // 한국투자증권 종목 마스터 파일을 이용해 종목코드, 종목명, 주식/ETF 구분을 로컬에서 조회한다.
         try (BufferedReader reader = Files.newBufferedReader(path, MASTER_CHARSET)) {
@@ -197,12 +218,13 @@ class AssetMaster {
                 }
                 byCode.put(assetInfo.getCode(), assetInfo);
                 byName.putIfAbsent(assetInfo.getName(), assetInfo);
+                loadedCount++;
             }
-            available = !byCode.isEmpty();
+            System.out.println(path.getFileName() + " 로드 완료: " + loadedCount + "개");
         } catch (IOException e) {
-            System.out.println("kospi_code.mst 파일을 읽지 못했습니다: " + e.getMessage());
-            available = false;
+            System.out.println(path.getFileName() + " 파일을 읽지 못했습니다: " + e.getMessage());
         }
+        return loadedCount;
     }
 
     private AssetInfo parseLine(String line) {
