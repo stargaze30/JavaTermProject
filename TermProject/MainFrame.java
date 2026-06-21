@@ -45,9 +45,9 @@ class MainFrame extends JFrame {
     private static final String KOSPI_CHART_CODE = "KOSPI";
     private static final String KOSDAQ_CHART_CODE = "KOSDAQ";
     private static final boolean DEBUG_REALTIME_UNKNOWN_ASSET = false;
-    private static final int INITIAL_PRICE_CORRECTION_DELAY_MS = 850;
+    private static final int INITIAL_PRICE_CORRECTION_DELAY_MS = 1000;
     private static final int INITIAL_PRICE_RETRY_DELAY_MS = 2000;
-    private static final int INITIAL_PRICE_RATE_LIMIT_DELAY_MS = 5000;
+    private static final int INITIAL_PRICE_RATE_LIMIT_DELAY_MS = 2000;
 
     private final transient Market market;
     private final transient User user;
